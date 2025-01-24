@@ -24,14 +24,20 @@ mod ls {
     use tower_lsp::{lsp_types::*, LspService, Server};
     use tower_lsp::{Client, LanguageServer};
     use tracing::debug;
-    use tree_sitter::Language;
+    use tracing::field::debug;
+    use tree_sitter::{Language, Tree};
 
-    use crate::ledger::{self, Ledger};
+    use crate::ledger::{self, traverse, Ledger};
 
     pub struct Backend {
         pub client: Client,
         pub language: Language,
         pub ledger: Arc<RwLock<Ledger>>,
+    }
+
+    enum CompletionKind {
+        Account,
+        Payee,
     }
 
     impl Backend {
@@ -45,12 +51,43 @@ mod ls {
             }
         }
 
-        fn account_completion() -> Vec<CompletionItem> {
-            vec![]
+        fn get_completion_type(&self, pos: Position) -> Option<CompletionKind> {
+            let ledger = self.ledger.write().unwrap();
+            let mut kind = None;
+            ledger.traverse_ast(&mut |node| {
+                if pos.line as usize >= node.start_position().row
+                    && pos.character as usize >= node.start_position().column
+                    && pos.line as usize <= node.end_position().row
+                    && pos.character as usize <= node.end_position().column
+                {
+                    if node.kind() == "account" {
+                        kind = Some(CompletionKind::Account);
+                    } else if node.kind() == "payee" {
+                        kind = Some(CompletionKind::Payee);
+                    }
+                }
+            });
+            kind
         }
 
-        fn payee_completion() -> Vec<CompletionItem> {
-            vec![]
+        fn account_completion(&self, pos: Position) -> Vec<CompletionItem> {
+            let ledger = self.ledger.write().unwrap();
+            let items = ledger
+                .get_accounts(pos)
+                .iter()
+                .map(|e| CompletionItem::new_simple(e.clone(), "Account".into()))
+                .collect::<Vec<CompletionItem>>();
+            items
+        }
+
+        fn payee_completion(&self, pos: Position) -> Vec<CompletionItem> {
+            let ledger = self.ledger.write().unwrap();
+            let items = ledger
+                .get_payees(pos)
+                .iter()
+                .map(|e| CompletionItem::new_simple(e.clone(), "Payee".into()))
+                .collect::<Vec<CompletionItem>>();
+            items
         }
     }
 
@@ -93,28 +130,44 @@ mod ls {
         }
 
         async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-            if let Some(ctx) = params.context {
-                if let Some(trigger_char) = ctx.trigger_character {
-                    match trigger_char.as_str() {
-                        ":" | "." | _ => {
-                            let v = vec![1];
-                            let mut ledger = self.ledger.write().unwrap();
-                            let mut items = ledger
-                                .get_accounts()
-                                .iter()
-                                .map(|e| CompletionItem::new_simple(e.clone(), "Account".into()))
-                                .collect::<Vec<CompletionItem>>();
-                            let comp = ledger.get_accounts();
-                            return Ok(Some(CompletionResponse::List(CompletionList {
-                                is_incomplete: false,
-                                items: items,
-                            })));
-                        }
-                        _ => (),
-                    }
-                }
+            debug!(
+                "cmp at cursor: ({:?}, {:?})",
+                params.text_document_position.position.line,
+                params.text_document_position.position.character,
+            );
+            let pos = params.text_document_position.position;
+            match self.get_completion_type(pos) {
+                Some(kind) => match kind {
+                    CompletionKind::Account => Ok(Some(CompletionResponse::List(CompletionList {
+                        is_incomplete: false,
+                        items: self.account_completion(pos),
+                    }))),
+                    CompletionKind::Payee => Ok(Some(CompletionResponse::List(CompletionList {
+                        is_incomplete: false,
+                        items: self.payee_completion(pos),
+                    }))),
+                },
+                None => Ok(None),
             }
-            Ok(None)
+            // if let Some(ctx) = params.context {
+            //     let Position { line, character } = params.text_document_position.position;
+            //
+            //     if let Some(trigger_char) = ctx.trigger_character {
+            //         match trigger_char.as_str() {
+            //             ":" | "." | _ => {
+            //                 let mut items = vec![];
+            //                 items.extend(self.account_completion());
+            //                 items.extend(self.payee_completion());
+            //                 return Ok(Some(CompletionResponse::List(CompletionList {
+            //                     is_incomplete: false,
+            //                     items: items,
+            //                 })));
+            //             }
+            //             _ => (),
+            //         }
+            //     }
+            // }
+            // Ok(None)
         }
 
         async fn shutdown(&self) -> Result<()> {
@@ -190,7 +243,7 @@ mod tesssitter_parser {
 #[cfg(test)]
 mod test {
     #[test]
-    fn show_account_completion_when_appropriate() {
-        todo!();
+    fn show_account_completion_when_in_accout_section_in_xact() {
+        // let s =
     }
 }
