@@ -25,7 +25,7 @@ mod ls {
     use tower_lsp::{Client, LanguageServer};
     use tracing::debug;
     use tracing::field::debug;
-    use tree_sitter::{Language, Tree};
+    use tree_sitter::{Language, Parser, Tree};
 
     use crate::ledger::{self, traverse, Ledger};
 
@@ -43,7 +43,9 @@ mod ls {
     impl Backend {
         pub fn new(client: Client) -> Self {
             let language = tree_sitter_ledger::language();
-            let ledger = ledger::Ledger::new();
+            let mut parser = Parser::new();
+            parser.set_language(language).unwrap();
+            let ledger = ledger::Ledger::new(parser);
             Self {
                 client,
                 language,
@@ -217,28 +219,28 @@ mod pest_parser {
     }
 }
 
-mod tesssitter_parser {
-    use std::fs::{File, OpenOptions};
-
-    use tracing::debug;
-    use tree_sitter::{InputEdit, Language, Parser, Point, TreeCursor};
-
-    pub fn parse() {
-        let mut parser = Parser::new();
-        let language = tree_sitter_ledger::language();
-        parser.set_language(language).unwrap();
-        let tree = parser
-            .parse(include_str!("../testdata/wallet.ledger"), None)
-            .unwrap();
-
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open("./tree.graph.dot")
-            .unwrap();
-        tree.print_dot_graph(&file);
-    }
-}
+// mod tesssitter_parser {
+//     use std::fs::{File, OpenOptions};
+//
+//     use tracing::debug;
+//     use tree_sitter::{InputEdit, Language, Parser, Point, TreeCursor};
+//
+//     pub fn parse() {
+//         let mut parser = Parser::new();
+//         let language = tree_sitter_ledger::language();
+//         parser.set_language(language).unwrap();
+//         let tree = parser
+//             .parse(include_str!("../testdata/wallet.ledger"), None)
+//             .unwrap();
+//
+//         let file = OpenOptions::new()
+//             .create(true)
+//             .write(true)
+//             .open("./tree.graph.dot")
+//             .unwrap();
+//         tree.print_dot_graph(&file);
+//     }
+// }
 
 #[cfg(test)]
 mod test {
