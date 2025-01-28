@@ -204,21 +204,6 @@ mod trace {
     }
 }
 
-mod pest_parser {
-    use pest::Parser;
-    use pest_derive::Parser;
-
-    #[derive(Parser)]
-    #[grammar = "ledger.pest"]
-    struct LedgerParser;
-
-    pub fn parse() {
-        let successful_parse =
-            LedgerParser::parse(Rule::transaction, "123/12/1 Payee\nExpense:Shopping 44");
-        println!("{:?}", successful_parse);
-    }
-}
-
 // mod tesssitter_parser {
 //     use std::fs::{File, OpenOptions};
 //

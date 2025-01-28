@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-pest = "2.7.15"
 pest_derive = "2.7.15"
 tokio = { version = "1.43.0", features = ["full"] }
 tower-lsp = "0.20.0"
