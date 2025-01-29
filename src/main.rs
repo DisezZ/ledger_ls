@@ -7,7 +7,6 @@ use trace::setup_logging;
 #[tokio::main]
 async fn main() {
     let _guard = setup_logging();
-    // tesssitter_parser::parse();
 
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
@@ -17,17 +16,17 @@ async fn main() {
 }
 
 mod ls {
-    use std::collections::HashSet;
+
     use std::sync::{Arc, RwLock};
 
     use tower_lsp::jsonrpc::Result;
-    use tower_lsp::{lsp_types::*, LspService, Server};
+    use tower_lsp::lsp_types::*;
     use tower_lsp::{Client, LanguageServer};
     use tracing::debug;
-    use tracing::field::debug;
-    use tree_sitter::{Language, Parser, Tree};
 
-    use crate::ledger::{self, traverse, Ledger};
+    use tree_sitter::{Language, Parser};
+
+    use crate::ledger::{self, Ledger};
 
     pub struct Backend {
         pub client: Client,
@@ -181,10 +180,10 @@ mod ls {
 mod trace {
     use std::fs::OpenOptions;
 
-    use tracing::{debug, level_filters::LevelFilter};
+    use tracing::level_filters::LevelFilter;
 
     pub fn setup_logging() -> tracing_appender::non_blocking::WorkerGuard {
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .append(true)
             .open("/home/lutfee/dev/projects/ledger_ls/logs/server.log")
             .unwrap();
@@ -203,29 +202,6 @@ mod trace {
         _guard
     }
 }
-
-// mod tesssitter_parser {
-//     use std::fs::{File, OpenOptions};
-//
-//     use tracing::debug;
-//     use tree_sitter::{InputEdit, Language, Parser, Point, TreeCursor};
-//
-//     pub fn parse() {
-//         let mut parser = Parser::new();
-//         let language = tree_sitter_ledger::language();
-//         parser.set_language(language).unwrap();
-//         let tree = parser
-//             .parse(include_str!("../testdata/wallet.ledger"), None)
-//             .unwrap();
-//
-//         let file = OpenOptions::new()
-//             .create(true)
-//             .write(true)
-//             .open("./tree.graph.dot")
-//             .unwrap();
-//         tree.print_dot_graph(&file);
-//     }
-// }
 
 #[cfg(test)]
 mod test {
