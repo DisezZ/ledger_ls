@@ -17,16 +17,18 @@ async fn main() {
 
 mod ls {
 
+    use std::collections::HashMap;
     use std::sync::{Arc, RwLock};
 
+    use request::PrepareRenameRequest;
     use tower_lsp::jsonrpc::Result;
     use tower_lsp::lsp_types::*;
     use tower_lsp::{Client, LanguageServer};
     use tracing::debug;
 
-    use tree_sitter::{Language, Parser};
+    use tree_sitter::{Language, Node, Parser, Point};
 
-    use crate::ledger::{self, Ledger};
+    use crate::ledger::{self, traverse, Ledger};
 
     pub struct Backend {
         pub client: Client,
@@ -34,9 +36,21 @@ mod ls {
         pub ledger: Arc<RwLock<Ledger>>,
     }
 
-    enum CompletionKind {
+    enum NodeKind {
         Account,
         Payee,
+    }
+
+    impl TryFrom<String> for NodeKind {
+        type Error = &'static str;
+
+        fn try_from(value: String) -> std::result::Result<Self, Self::Error> {
+            match value.as_str() {
+                "account" => Ok(NodeKind::Account),
+                "payee" => Ok(NodeKind::Payee),
+                _ => Err("Unknown node kind"),
+            }
+        }
     }
 
     impl Backend {
@@ -52,7 +66,7 @@ mod ls {
             }
         }
 
-        fn get_completion_type(&self, pos: Position) -> Option<CompletionKind> {
+        fn get_node_kind(&self, pos: Position) -> Option<NodeKind> {
             let ledger = self.ledger.write().unwrap();
             let mut kind = None;
             ledger.traverse_ast(&mut |node| {
@@ -62,9 +76,9 @@ mod ls {
                     && pos.character as usize <= node.end_position().column
                 {
                     if node.kind() == "account" {
-                        kind = Some(CompletionKind::Account);
+                        kind = Some(NodeKind::Account);
                     } else if node.kind() == "payee" {
-                        kind = Some(CompletionKind::Payee);
+                        kind = Some(NodeKind::Payee);
                     }
                 }
             });
@@ -105,6 +119,12 @@ mod ls {
                         trigger_characters: Some(vec![":".into(), ".".into()]),
                         ..Default::default()
                     }),
+                    rename_provider: Some(OneOf::Right(RenameOptions {
+                        prepare_provider: Some(true),
+                        work_done_progress_options: WorkDoneProgressOptions {
+                            work_done_progress: None,
+                        },
+                    })),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -118,10 +138,12 @@ mod ls {
         }
 
         async fn did_open(&self, params: DidOpenTextDocumentParams) {
-            debug!("Document open");
+            let mut ledger = self.ledger.write().unwrap();
+            ledger.process_text(&params.text_document.text);
         }
 
         async fn did_change(&self, params: DidChangeTextDocumentParams) {
+            debug!("did_change params: {:?}", params);
             let mut ledger = self.ledger.write().unwrap();
             ledger.process_text(&params.content_changes[0].text);
         }
@@ -137,13 +159,13 @@ mod ls {
                 params.text_document_position.position.character,
             );
             let pos = params.text_document_position.position;
-            match self.get_completion_type(pos) {
+            match self.get_node_kind(pos) {
                 Some(kind) => match kind {
-                    CompletionKind::Account => Ok(Some(CompletionResponse::List(CompletionList {
+                    NodeKind::Account => Ok(Some(CompletionResponse::List(CompletionList {
                         is_incomplete: false,
                         items: self.account_completion(pos),
                     }))),
-                    CompletionKind::Payee => Ok(Some(CompletionResponse::List(CompletionList {
+                    NodeKind::Payee => Ok(Some(CompletionResponse::List(CompletionList {
                         is_incomplete: false,
                         items: self.payee_completion(pos),
                     }))),
@@ -169,6 +191,108 @@ mod ls {
             //     }
             // }
             // Ok(None)
+        }
+
+        async fn prepare_rename(
+            &self,
+            params: TextDocumentPositionParams,
+        ) -> Result<Option<PrepareRenameResponse>> {
+            debug!(
+                "prepare rename at cursor: ({:?}, {:?})",
+                params.position.line, params.position.character,
+            );
+            let pos = params.position;
+            let ledger = self.ledger.write().unwrap();
+            let node = ledger
+                .ast
+                .as_ref()
+                .unwrap()
+                .root_node()
+                .named_descendant_for_point_range(
+                    Point::new(pos.line as usize, pos.character as usize),
+                    Point::new(pos.line as usize, pos.character as usize),
+                )
+                .unwrap();
+            match NodeKind::try_from(node.kind().to_string()).ok() {
+                Some(kind) => match kind {
+                    NodeKind::Account | NodeKind::Payee => {
+                        Ok(Some(PrepareRenameResponse::RangeWithPlaceholder {
+                            range: Range::new(
+                                Position {
+                                    line: node.range().start_point.row as u32,
+                                    character: node.range().start_point.column as u32,
+                                },
+                                Position {
+                                    line: node.range().end_point.row as u32,
+                                    character: (node.range().end_point.column + 1) as u32,
+                                },
+                            ),
+                            placeholder: ledger.source
+                                [node.byte_range().start..node.byte_range().end]
+                                .to_string(),
+                        }))
+                    }
+                    _ => Ok(None),
+                },
+                None => Ok(None),
+            }
+        }
+
+        async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+            debug!(
+                "rename at cursor: ({:?}, {:?})",
+                params.text_document_position.position.line,
+                params.text_document_position.position.character,
+            );
+            let pos = params.text_document_position.position;
+            let ledger = self.ledger.write().unwrap();
+            let cur_node = ledger
+                .ast
+                .as_ref()
+                .unwrap()
+                .root_node()
+                .named_descendant_for_point_range(
+                    Point::new(pos.line as usize, pos.character as usize),
+                    Point::new(pos.line as usize, pos.character as usize),
+                )
+                .unwrap();
+            let mut url_text_edit: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+            let mut text_edit_vec: Vec<TextEdit> = vec![];
+            traverse(ledger.ast.as_ref().unwrap().root_node(), &mut |node| {
+                if node.kind() != cur_node.kind() {
+                    return;
+                }
+
+                let text =
+                    ledger.source[node.byte_range().start..node.byte_range().end].to_string();
+                let cur_text = ledger.source
+                    [cur_node.byte_range().start..cur_node.byte_range().end]
+                    .to_string();
+                if cur_text != text {
+                    return;
+                }
+
+                let range = Range::new(
+                    Position {
+                        line: node.range().start_point.row as u32,
+                        character: node.range().start_point.column as u32,
+                    },
+                    Position {
+                        line: node.range().end_point.row as u32,
+                        character: (node.range().end_point.column + 1) as u32,
+                    },
+                );
+                text_edit_vec.push(TextEdit::new(range, params.new_name.clone()));
+            });
+            url_text_edit.insert(
+                params.text_document_position.text_document.uri,
+                // vec![TextEdit::new(
+                //     Range::new(Position::new(0, 0), Position::new(0, 9)),
+                //     params.new_name,
+                // )],
+                text_edit_vec,
+            );
+            Ok(Some(WorkspaceEdit::new(url_text_edit)))
         }
 
         async fn shutdown(&self) -> Result<()> {

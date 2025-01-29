@@ -6,8 +6,8 @@ use tree_sitter::{Node, Parser, Point, Tree};
 
 pub struct Ledger {
     parser: Parser,
-    ast: Option<Tree>,
-    source: String,
+    pub ast: Option<Tree>,
+    pub source: String,
 }
 
 impl Ledger {
@@ -63,6 +63,18 @@ impl Ledger {
         );
         payees.into_iter().collect()
     }
+
+    // pub fn rename_account(&mut self, from: &String, to: &String) {
+    //     traverse(self.ast.as_ref().unwrap().root_node(), &mut |node| {
+    //         if NodeKind::try_from(node.kind().to_string()) == NodeKind::Account
+    //             && *from == self.source[node.start_byte()..node.end_byte()]
+    //         {
+    //             // println!("FOUND");
+    //             self.source
+    //                 .replace_range(node.start_byte()..node.end_byte(), &to);
+    //         }
+    //     });
+    // }
 
     pub fn traverse_ast(&self, f: &mut impl FnMut(Node)) {
         traverse(
@@ -136,6 +148,35 @@ mod test {
         assert_eq!(
             a,
             HashSet::from_iter::<Vec<String>>(vec!["Test Payerr".to_string(),])
+        );
+    }
+
+    #[test]
+    fn rename_account() {
+        // arrange
+        let s = include_str!("../testdata/wallet.ledger");
+        let mut parser = Parser::new();
+        parser.set_language(tree_sitter_ledger::language()).unwrap();
+        let mut ledger = Ledger::new(parser);
+
+        // act
+        ledger.process_text(&s.to_string());
+        // ledger.rename_account(
+        //     &"Expenses:Food:Dinner".to_string(),
+        //     &"Expenses:Food:Dining".to_string(),
+        // );
+        ledger.process_text(&&ledger.source.to_string());
+        let a: HashSet<String> = HashSet::from_iter(ledger.get_accounts(Default::default()));
+
+        // assert
+        assert_eq!(
+            a,
+            HashSet::from_iter::<Vec<String>>(vec![
+                "Expenses:Food:Breakfast".to_string(),
+                "Expenses:Food:Lunch".to_string(),
+                "Expenses:Food:Dining".to_string(),
+                "Assets:Wallet:Cash".to_string()
+            ])
         );
     }
 }

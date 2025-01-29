@@ -1,8 +1,11 @@
-2025-01-01 Test my language server
-    Expenses:Dinner    $12.00
-    Assets:Wallet
+2025-01-01 Burger King
+    Expenses:Food:Breakfast  $10.00
+    Assets:Wallet:Cash123
 
-2025-01-01 Test
-    Expenses:Dinner    $12.00
-    Assets:Wallet
+2025-01-01 Taco Bell
+    Expenses:Food:Lunch    $20.00
+    Assets:Wallet:Cash123
 
+2025-01-01 KFC
+    Expenses:Food:Dinner    $12.00
+    Assets:Wallet:Cash123
