@@ -39,3 +39,15 @@ lspconfig.ledger_ls.setup({
     on_attach = on_attach,
 })
 ```
+
+## Features
+
+- [x] Autocomplete
+  - [x] Account
+  - [x] Payee
+  - [ ] Date
+- [ ] Rename
+- [ ] Formatting
+- [ ] Diagnostics
+- [ ] Definitions
+- [ ] Hover
