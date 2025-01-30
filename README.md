@@ -46,7 +46,10 @@ lspconfig.ledger_ls.setup({
   - [x] Account
   - [x] Payee
   - [ ] Date
-- [ ] Rename
+- [x] Rename
+  - [x] Account
+  - [x] Payee
+- [ ] Workspace (currently consider only current file for implemented features)
 - [ ] Formatting
 - [ ] Diagnostics
 - [ ] Definitions
