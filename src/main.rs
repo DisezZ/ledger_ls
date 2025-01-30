@@ -203,16 +203,7 @@ mod ls {
             );
             let pos = params.position;
             let ledger = self.ledger.write().unwrap();
-            let node = ledger
-                .ast
-                .as_ref()
-                .unwrap()
-                .root_node()
-                .named_descendant_for_point_range(
-                    Point::new(pos.line as usize, pos.character as usize),
-                    Point::new(pos.line as usize, pos.character as usize),
-                )
-                .unwrap();
+            let node = ledger.get_named_node_from_position(pos);
             match NodeKind::try_from(node.kind().to_string()).ok() {
                 Some(kind) => match kind {
                     NodeKind::Account | NodeKind::Payee => {
@@ -246,16 +237,7 @@ mod ls {
             );
             let pos = params.text_document_position.position;
             let ledger = self.ledger.write().unwrap();
-            let cur_node = ledger
-                .ast
-                .as_ref()
-                .unwrap()
-                .root_node()
-                .named_descendant_for_point_range(
-                    Point::new(pos.line as usize, pos.character as usize),
-                    Point::new(pos.line as usize, pos.character as usize),
-                )
-                .unwrap();
+            let cur_node = ledger.get_named_node_from_position(pos);
             let mut url_text_edit: HashMap<Url, Vec<TextEdit>> = HashMap::new();
             let mut text_edit_vec: Vec<TextEdit> = vec![];
             traverse(ledger.ast.as_ref().unwrap().root_node(), &mut |node| {

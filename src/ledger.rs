@@ -85,6 +85,18 @@ impl Ledger {
             f,
         );
     }
+
+    pub fn get_named_node_from_position(&self, pos: Position) -> Node {
+        self.ast
+            .as_ref()
+            .unwrap()
+            .root_node()
+            .named_descendant_for_point_range(
+                Point::new(pos.line as usize, pos.character as usize),
+                Point::new(pos.line as usize, pos.character as usize),
+            )
+            .unwrap()
+    }
 }
 
 pub fn traverse(node: Node, f: &mut impl FnMut(Node)) {
